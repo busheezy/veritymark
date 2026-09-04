@@ -2,4 +2,8 @@
 
 import { executeCli } from "./app.js";
 
-process.exitCode = await executeCli(process.argv.slice(2));
+const argv = process.argv.slice(2);
+
+const exitCode = await executeCli(argv);
+
+process.exitCode = exitCode;

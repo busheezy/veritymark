@@ -1,7 +1,8 @@
 {
   "name": "headwind",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Lint Tailwind CSS classes from the command line",
+  "license": "MIT",
   "bin": {
     "headwind": "dist/cli.js"
   },
@@ -19,7 +20,8 @@
   "dependencies": {
     "@tailwindcss/language-server": "0.16.0",
     "tinyglobby": "0.2.17",
-    "vscode-jsonrpc": "9.0.2"
+    "vscode-jsonrpc": "9.0.2",
+    "zod": "4.5.4"
   },
   "devDependencies": {
     "@types/node": "26.4.1",

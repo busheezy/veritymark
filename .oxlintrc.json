@@ -1,0 +1,7 @@
+{
+  "rules": {
+    "complexity": ["error", 10],
+    "max-depth": ["error", 3],
+    "no-ternary": "error"
+  }
+}

@@ -2,6 +2,28 @@ import path from "node:path";
 
 import type { Diagnostic, FileDiagnostics } from "./types.js";
 
+interface DiagnosticCounts {
+  errors: number;
+  warnings: number;
+}
+
+interface JsonMessage {
+  ruleId: string;
+  severity: number;
+  message: string;
+  line: number;
+  column: number;
+  endLine: number;
+  endColumn: number;
+}
+
+interface JsonFileReport {
+  filePath: string;
+  messages: JsonMessage[];
+  errorCount: number;
+  warningCount: number;
+}
+
 const severityNames = new Map([
   [1, "error"],
   [2, "warning"],
@@ -10,102 +32,261 @@ const severityNames = new Map([
 ]);
 
 function plural(count: number, singular: string): string {
-  return `${count} ${count === 1 ? singular : `${singular}s`}`;
+  if (count === 1) {
+    return `${count} ${singular}`;
+  }
+
+  return `${count} ${singular}s`;
 }
 
 function colorize(enabled: boolean, code: number, value: string): string {
-  return enabled ? `\u001B[${code}m${value}\u001B[0m` : value;
+  if (!enabled) {
+    return value;
+  }
+
+  return `\u001B[${code}m${value}\u001B[0m`;
 }
 
 function severityName(diagnostic: Diagnostic): string {
-  return severityNames.get(diagnostic.severity ?? 1) ?? "error";
+  const severity = diagnostic.severity ?? 1;
+
+  const configuredName = severityNames.get(severity);
+
+  const name = configuredName ?? "error";
+
+  return name;
 }
 
 function diagnosticCode(diagnostic: Diagnostic): string {
   if (diagnostic.code !== undefined) {
-    return String(diagnostic.code);
+    const code = String(diagnostic.code);
+
+    return code;
   }
 
   return diagnostic.source ?? "tailwindcss";
 }
 
-export function countDiagnostics(results: FileDiagnostics[]): {
-  errors: number;
-  warnings: number;
-} {
-  let errors = 0;
-  let warnings = 0;
+function severityColor(severity: string): number {
+  if (severity === "error") {
+    return 31;
+  }
+
+  if (severity === "warning") {
+    return 33;
+  }
+
+  return 36;
+}
+
+function summaryColor(errors: number): number {
+  if (errors > 0) {
+    return 31;
+  }
+
+  return 33;
+}
+
+function formatLocation(diagnostic: Diagnostic): string {
+  return `${diagnostic.range.start.line + 1}:${diagnostic.range.start.character + 1}`;
+}
+
+function formatDiagnosticLine(diagnostic: Diagnostic, location: string, color: boolean): string {
+  const severity = severityName(diagnostic);
+
+  const singleLineMessage = diagnostic.message.replace(/\s+/g, " ");
+
+  const message = singleLineMessage.trim();
+
+  const code = diagnosticCode(diagnostic);
+
+  const formattedLocation = colorize(color, 2, location);
+
+  const severityCode = severityColor(severity);
+
+  const paddedSeverity = severity.padEnd(7);
+
+  const formattedSeverity = colorize(color, severityCode, paddedSeverity);
+
+  const formattedCode = colorize(color, 2, code);
+
+  return `  ${formattedLocation}  ${formattedSeverity}  ${message}  ${formattedCode}`;
+}
+
+function appendFileReport(
+  lines: string[],
+  result: FileDiagnostics,
+  cwd: string,
+  color: boolean,
+): void {
+  const locations = result.diagnostics.map(formatLocation);
+
+  const locationWidths = locations.map((location) => location.length);
+
+  const locationWidth = Math.max(...locationWidths);
+
+  const relativePath = path.relative(cwd, result.path);
+
+  const basename = path.basename(result.path);
+
+  const displayPath = relativePath || basename;
+
+  const formattedPath = colorize(color, 4, displayPath);
+
+  lines.push(formattedPath);
+
+  for (const [index, diagnostic] of result.diagnostics.entries()) {
+    const location = locations[index]?.padStart(locationWidth) ?? "";
+
+    const diagnosticLine = formatDiagnosticLine(diagnostic, location, color);
+
+    lines.push(diagnosticLine);
+  }
+
+  lines.push("");
+}
+
+function appendSummary(
+  lines: string[],
+  results: FileDiagnostics[],
+  errors: number,
+  warnings: number,
+  color: boolean,
+): void {
+  const problems = errors + warnings;
+
+  if (problems === 0) {
+    const fileCount = plural(results.length, "file");
+
+    const summary = `✓ No Tailwind CSS problems found in ${fileCount}.`;
+
+    const formattedSummary = colorize(color, 32, summary);
+
+    lines.push(formattedSummary);
+
+    return;
+  }
+
+  const problemCount = plural(problems, "problem");
+
+  const errorCount = plural(errors, "error");
+
+  const warningCount = plural(warnings, "warning");
+
+  const summary = `✖ ${problemCount} (${errorCount}, ${warningCount})`;
+
+  const colorCode = summaryColor(errors);
+
+  const formattedSummary = colorize(color, colorCode, summary);
+
+  lines.push(formattedSummary);
+}
+
+function createDiagnosticCounts(): DiagnosticCounts {
+  return { errors: 0, warnings: 0 };
+}
+
+function countDiagnostic(counts: DiagnosticCounts, diagnostic: Diagnostic): void {
+  const severity = diagnostic.severity ?? 1;
+
+  if (severity === 1) {
+    counts.errors++;
+
+    return;
+  }
+
+  if (severity === 2) {
+    counts.warnings++;
+  }
+}
+
+export function countDiagnostics(results: FileDiagnostics[]): DiagnosticCounts {
+  const counts = createDiagnosticCounts();
 
   for (const result of results) {
     for (const diagnostic of result.diagnostics) {
-      if ((diagnostic.severity ?? 1) === 1) {
-        errors++;
-      } else if (diagnostic.severity === 2) {
-        warnings++;
-      }
+      countDiagnostic(counts, diagnostic);
     }
   }
 
-  return { errors, warnings };
+  return counts;
 }
 
 export function formatStylish(results: FileDiagnostics[], cwd: string, color: boolean): string {
   const affected = results.filter((result) => result.diagnostics.length > 0);
+
   const lines: string[] = [];
 
   for (const result of affected) {
-    const locations = result.diagnostics.map(
-      (diagnostic) => `${diagnostic.range.start.line + 1}:${diagnostic.range.start.character + 1}`,
-    );
-    const locationWidth = Math.max(...locations.map((location) => location.length));
-    const displayPath = path.relative(cwd, result.path) || path.basename(result.path);
-    lines.push(colorize(color, 4, displayPath));
-
-    for (const [index, diagnostic] of result.diagnostics.entries()) {
-      const severity = severityName(diagnostic);
-      const severityColor = severity === "error" ? 31 : severity === "warning" ? 33 : 36;
-      const location = locations[index]?.padStart(locationWidth) ?? "";
-      const message = diagnostic.message.replace(/\s+/g, " ").trim();
-      lines.push(
-        `  ${colorize(color, 2, location)}  ${colorize(color, severityColor, severity.padEnd(7))}  ${message}  ${colorize(color, 2, diagnosticCode(diagnostic))}`,
-      );
-    }
-
-    lines.push("");
+    appendFileReport(lines, result, cwd, color);
   }
 
   const { errors, warnings } = countDiagnostics(results);
-  const problems = errors + warnings;
-  if (problems === 0) {
-    lines.push(
-      colorize(color, 32, `✓ No Tailwind CSS problems found in ${plural(results.length, "file")}.`),
-    );
-  } else {
-    const summary = `✖ ${plural(problems, "problem")} (${plural(errors, "error")}, ${plural(warnings, "warning")})`;
-    lines.push(colorize(color, errors > 0 ? 31 : 33, summary));
+
+  appendSummary(lines, results, errors, warnings, color);
+
+  const report = lines.join("\n");
+
+  return report;
+}
+
+function formatJsonMessage(diagnostic: Diagnostic): JsonMessage {
+  const ruleId = diagnosticCode(diagnostic);
+
+  const severity = diagnostic.severity ?? 1;
+
+  const message = diagnostic.message;
+
+  const line = diagnostic.range.start.line + 1;
+
+  const column = diagnostic.range.start.character + 1;
+
+  const endLine = diagnostic.range.end.line + 1;
+
+  const endColumn = diagnostic.range.end.character + 1;
+
+  return {
+    ruleId,
+    severity,
+    message,
+    line,
+    column,
+    endLine,
+    endColumn,
+  };
+}
+
+function formatJsonResult(result: FileDiagnostics): JsonFileReport {
+  const filePath = result.path;
+
+  const messages: JsonMessage[] = [];
+
+  const counts = createDiagnosticCounts();
+
+  for (const diagnostic of result.diagnostics) {
+    const message = formatJsonMessage(diagnostic);
+
+    messages.push(message);
+
+    countDiagnostic(counts, diagnostic);
   }
 
-  return lines.join("\n");
+  const errorCount = counts.errors;
+
+  const warningCount = counts.warnings;
+
+  return {
+    filePath,
+    messages,
+    errorCount,
+    warningCount,
+  };
 }
 
 export function formatJson(results: FileDiagnostics[]): string {
-  return JSON.stringify(
-    results.map((result) => ({
-      filePath: result.path,
-      messages: result.diagnostics.map((diagnostic) => ({
-        ruleId: diagnosticCode(diagnostic),
-        severity: diagnostic.severity ?? 1,
-        message: diagnostic.message,
-        line: diagnostic.range.start.line + 1,
-        column: diagnostic.range.start.character + 1,
-        endLine: diagnostic.range.end.line + 1,
-        endColumn: diagnostic.range.end.character + 1,
-      })),
-      errorCount: result.diagnostics.filter((diagnostic) => (diagnostic.severity ?? 1) === 1)
-        .length,
-      warningCount: result.diagnostics.filter((diagnostic) => diagnostic.severity === 2).length,
-    })),
-    null,
-    2,
-  );
+  const report = results.map(formatJsonResult);
+
+  const json = JSON.stringify(report, null, 2);
+
+  return json;
 }
