@@ -1,6 +1,6 @@
-import { parseArgs } from "node:util";
 import path from "node:path";
 
+import { Command } from "commander";
 import { z } from "zod";
 
 import type { Options } from "./types.js";
@@ -29,57 +29,22 @@ const maxWarningsSchema = z.compile(maxWarningsSchemaDefinition, compilationOpti
 
 const timeoutSchema = z.compile(timeoutSchemaDefinition, compilationOptions);
 
-const configArgument = { type: "string" } as const;
-
-const cwdArgument = { type: "string" } as const;
-
-const formatArgument = { type: "string", default: "stylish" } as const;
-
-const maxWarningsArgument = { type: "string", default: "-1" } as const;
-
-const quietArgument = { type: "boolean", default: false } as const;
-
-const timeoutArgument = { type: "string", default: "30000" } as const;
-
-const defaultColor = process.stdout.isTTY;
-
-const colorArgument = { type: "boolean", default: defaultColor } as const;
-
-const helpArgument = { type: "boolean", short: "h", default: false } as const;
-
-const versionArgument = { type: "boolean", short: "v", default: false } as const;
-
-const argumentOptions = {
-  config: configArgument,
-  cwd: cwdArgument,
-  format: formatArgument,
-  "max-warnings": maxWarningsArgument,
-  quiet: quietArgument,
-  timeout: timeoutArgument,
-  color: colorArgument,
-  help: helpArgument,
-  version: versionArgument,
-} as const;
-
-export const help = `headwind [options] [patterns...]
-
-Lint Tailwind CSS classes with the official Tailwind language server.
-
-Options:
-  --config <path>         Tailwind config or CSS entrypoint
-  --cwd <path>            Working directory (default: current directory)
-  --format <name>         Output format: stylish or json (default: stylish)
-  --max-warnings <count>  Exit with an error above this warning count
-  --quiet                 Report errors only
-  --timeout <ms>          Language server timeout (default: 30000)
-  --no-color              Disable colored output
-  --help                  Show help
-  --version               Show version
-
-Exit codes:
+const exitCodeHelp = `Exit codes:
   0  No errors and warning limit not exceeded
   1  Lint errors or too many warnings
   2  Configuration or runtime error`;
+
+interface CliFlags {
+  config?: string;
+  cwd?: string;
+  format: Options["format"];
+  maxWarnings: number;
+  quiet?: boolean;
+  timeout: number;
+  color: boolean;
+  help?: boolean;
+  version?: boolean;
+}
 
 export interface ParsedArguments {
   options?: Options;
@@ -127,6 +92,53 @@ function parseTimeout(value: string): number {
   return result.data;
 }
 
+function ignoreParserOutput(): void {}
+
+function createCommand(): Command {
+  const command = new Command();
+
+  command.name("headwind");
+  command.description("Lint Tailwind CSS classes with the official Tailwind language server.");
+  command.usage("[options] [patterns...]");
+  command.argument("[patterns...]");
+  command.helpOption(false);
+  command.exitOverride();
+
+  command.option("--config <path>", "Tailwind config or CSS entrypoint");
+  command.option("--cwd <path>", "Working directory");
+  command.option("--format <name>", "Output format: stylish or json", parseFormat, "stylish");
+  command.option(
+    "--max-warnings <count>",
+    "Exit with an error above this warning count",
+    parseMaxWarnings,
+    -1,
+  );
+  command.option("--quiet", "Report errors only");
+  command.option("--timeout <ms>", "Language server timeout", parseTimeout, 30_000);
+
+  const defaultColor = process.stdout.isTTY;
+
+  command.option("--no-color", "Disable colored output", defaultColor);
+  command.option("-h, --help", "Show help");
+  command.option("-v, --version", "Show version");
+
+  const outputConfiguration = { writeErr: ignoreParserOutput };
+
+  command.configureOutput(outputConfiguration);
+
+  return command;
+}
+
+function createHelp(): string {
+  const command = createCommand();
+
+  const commandHelp = command.helpInformation();
+
+  const completeHelp = `${commandHelp}\n${exitCodeHelp}`;
+
+  return completeHelp;
+}
+
 function resolveConfig(cwd: string, config: string | undefined): string | undefined {
   if (!config) {
     return undefined;
@@ -153,19 +165,19 @@ function configOption(config: string | undefined): Pick<Options, "config"> {
   return { config };
 }
 
+export const help = createHelp();
+
 export function parseArguments(argv: string[]): ParsedArguments {
-  const parsed = parseArgs({
-    args: argv,
-    allowPositionals: true,
-    allowNegative: true,
-    strict: true,
-    options: argumentOptions,
-  });
+  const command = createCommand();
 
-  if (parsed.values.help || parsed.values.version) {
-    const help = parsed.values.help;
+  command.parse(argv, { from: "user" });
 
-    const version = parsed.values.version;
+  const flags = command.opts<CliFlags>();
+
+  if (flags.help || flags.version) {
+    const help = flags.help === true;
+
+    const version = flags.version === true;
 
     return {
       help,
@@ -175,35 +187,27 @@ export function parseArguments(argv: string[]): ParsedArguments {
 
   const processCwd = process.cwd();
 
-  const requestedCwd = parsed.values.cwd ?? processCwd;
+  const requestedCwd = flags.cwd ?? processCwd;
 
   const cwd = path.resolve(requestedCwd);
 
-  const config = resolveConfig(cwd, parsed.values.config);
+  const config = resolveConfig(cwd, flags.config);
 
-  const patterns = resolvePatterns(parsed.positionals);
-
-  const format = parseFormat(parsed.values.format);
-
-  const maxWarnings = parseMaxWarnings(parsed.values["max-warnings"]);
-
-  const timeout = parseTimeout(parsed.values.timeout);
+  const patterns = resolvePatterns(command.args);
 
   const configProperties = configOption(config);
 
-  const quiet = parsed.values.quiet;
-
-  const color = parsed.values.color;
+  const quiet = flags.quiet ?? false;
 
   const options: Options = {
     cwd,
     patterns,
     ...configProperties,
-    format,
+    format: flags.format,
     quiet,
-    color,
-    maxWarnings,
-    timeout,
+    color: flags.color,
+    maxWarnings: flags.maxWarnings,
+    timeout: flags.timeout,
   };
 
   return {

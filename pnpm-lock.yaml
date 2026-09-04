@@ -11,6 +11,9 @@ importers:
       '@tailwindcss/language-server':
         specifier: 0.16.0
         version: 0.16.0
+      commander:
+        specifier: 14.0.3
+        version: 14.0.3
       tinyglobby:
         specifier: 0.2.17
         version: 0.2.17
@@ -392,6 +395,10 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  commander@14.0.3:
+    resolution: {integrity: sha512-H+y0Jo/T1RZ9qPP4Eh1pkcQcLRglraJaSLoyOtHxu6AapkjWVCy2Sit1QQ4x3Dng8qDlSsZEet7g5Pq06MvTgw==}
+    engines: {node: '>=20'}
+
   fdir@6.5.0:
     resolution: {integrity: sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg==}
     engines: {node: '>=12.0.0'}
@@ -635,6 +642,8 @@ snapshots:
 
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
+
+  commander@14.0.3: {}
 
   fdir@6.5.0(picomatch@4.0.7):
     optionalDependencies:
