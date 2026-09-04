@@ -3,6 +3,10 @@
   "version": "0.2.0",
   "description": "Lint Tailwind CSS classes from the command line",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/busheezy/veritymark.git"
+  },
   "bin": {
     "veritymark": "dist/cli.js"
   },
