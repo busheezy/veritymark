@@ -12,7 +12,7 @@ import type { Options } from "../src/types.js";
 test("waits for every language-server document without using Tailwind", async (context) => {
   const temporaryDirectory = tmpdir();
 
-  const fixturePrefix = path.join(temporaryDirectory, "headwind-language-server-");
+  const fixturePrefix = path.join(temporaryDirectory, "veritymark-language-server-");
 
   const cwd = await mkdtemp(fixturePrefix);
 

@@ -1,4 +1,4 @@
-# headwind
+# Veritymark
 
 Lint Tailwind CSS classes from the command line using the official
 `@tailwindcss/language-server` diagnostics.
@@ -6,10 +6,10 @@ Lint Tailwind CSS classes from the command line using the official
 ```sh
 pnpm install
 pnpm build
-headwind "src/**/*.{html,tsx,vue}"
+veritymark "src/**/*.{html,tsx,vue}"
 ```
 
-With no patterns, headwind scans common template, stylesheet, and script file types. It
+With no patterns, Veritymark scans common template, stylesheet, and script file types. It
 waits for every matched file to finish before printing one report and setting its exit
 code.
 
@@ -22,7 +22,7 @@ src/page.html
 
 Use `--config` to select a Tailwind v3 configuration file or Tailwind v4 CSS entrypoint.
 Use `--quiet`, `--max-warnings`, `--format json`, and `--no-color` in the same way as
-other command-line linters. Run `headwind --help` for all options.
+other command-line linters. Run `veritymark --help` for all options.
 
 Exit code `0` means success, `1` means lint errors or too many warnings, and `2` means a
 configuration or runtime failure.

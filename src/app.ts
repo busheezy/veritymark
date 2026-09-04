@@ -181,7 +181,7 @@ export async function executeCli(
   } catch (error) {
     const message = errorMessage(error);
 
-    const formattedError = `headwind: ${message}`;
+    const formattedError = `veritymark: ${message}`;
 
     output.error(formattedError);
 

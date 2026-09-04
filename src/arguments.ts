@@ -97,7 +97,7 @@ function ignoreParserOutput(): void {}
 function createCommand(): Command {
   const command = new Command();
 
-  command.name("headwind");
+  command.name("veritymark");
   command.description("Lint Tailwind CSS classes with the official Tailwind language server.");
   command.usage("[options] [patterns...]");
   command.argument("[patterns...]");

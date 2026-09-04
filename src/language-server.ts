@@ -509,7 +509,7 @@ function initializationParams(options: Options): object {
 
   const initializationOptions = { testMode: true };
 
-  const clientInfo = { name: "headwind", version };
+  const clientInfo = { name: "veritymark", version };
 
   return {
     processId,

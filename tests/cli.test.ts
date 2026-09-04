@@ -68,7 +68,7 @@ async function writeFixtureFile(cwd: string, file: string): Promise<void> {
 async function createFixture(context: test.TestContext, files: string[]): Promise<string> {
   const temporaryDirectory = tmpdir();
 
-  const fixturePrefix = path.join(temporaryDirectory, "headwind-cli-");
+  const fixturePrefix = path.join(temporaryDirectory, "veritymark-cli-");
 
   const cwd = await mkdtemp(fixturePrefix);
 

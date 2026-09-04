@@ -1,10 +1,10 @@
 {
-  "name": "headwind",
+  "name": "veritymark",
   "version": "0.2.0",
   "description": "Lint Tailwind CSS classes from the command line",
   "license": "MIT",
   "bin": {
-    "headwind": "dist/cli.js"
+    "veritymark": "dist/cli.js"
   },
   "files": [
     "dist"
