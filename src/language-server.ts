@@ -67,7 +67,7 @@ interface LanguageServerSession {
   serverFailure: Promise<never>;
 }
 
-const maximumDocumentOpenConcurrency = 16;
+const maximumDocumentOpenConcurrency = 1;
 
 const languageIds: Record<string, string> = {
   ".astro": "astro",
@@ -153,11 +153,23 @@ function completeDocument(state: DocumentState): void {
   state.resolve(result);
 }
 
-function withTimeout<T>(promise: Promise<T>, timeout: number, message: string): Promise<T> {
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeout: number,
+  message: string | (() => string),
+): Promise<T> {
   const timedPromise = new Promise<T>((resolve, reject) => {
-    const timeoutError = new Error(message);
-
     const rejectForTimeout = (): void => {
+      if (typeof message === "function") {
+        const timeoutError = new Error(message());
+
+        reject(timeoutError);
+
+        return;
+      }
+
+      const timeoutError = new Error(message);
+
       reject(timeoutError);
     };
 
@@ -565,7 +577,7 @@ async function openDocument(
   connection: LanguageServerConnection,
   states: Map<string, DocumentState>,
   filePath: string,
-): Promise<void> {
+): Promise<DocumentState> {
   const fileUrl = pathToFileURL(filePath);
 
   const uri = fileUrl.href;
@@ -588,6 +600,8 @@ async function openDocument(
   await connection.sendNotification("textDocument/didOpen", {
     textDocument,
   });
+
+  return state;
 }
 
 async function openDocuments(session: LanguageServerSession, files: string[]): Promise<void> {
@@ -630,22 +644,53 @@ async function openQueuedDocuments(
       continue;
     }
 
-    await openDocument(session.connection, session.states, filePath);
+    const state = await openDocument(session.connection, session.states, filePath);
+
+    await Promise.race([state.promise, session.serverFailure]);
   }
 }
 
-function completionMessage(fileCount: number): string {
+function completionMessage(session: LanguageServerSession, files: string[], cwd: string): string {
+  const pendingFiles = files.filter((filePath) => {
+    const fileUrl = pathToFileURL(filePath);
+
+    const state = session.states.get(fileUrl.href);
+
+    return !state || !state.ready || !state.projectChecked || state.diagnostics === undefined;
+  });
+
+  const fileCount = pendingFiles.length;
+
+  let noun = "files";
+
   if (fileCount === 1) {
-    return "Timed out waiting for 1 file to finish.";
+    noun = "file";
   }
 
-  return `Timed out waiting for ${fileCount} files to finish.`;
+  const displayedFiles = pendingFiles.slice(0, 5).map((filePath) => path.relative(cwd, filePath));
+
+  const remainingCount = fileCount - displayedFiles.length;
+
+  let remaining = "";
+
+  if (remainingCount > 0) {
+    remaining = ` (+${remainingCount} more)`;
+  }
+
+  const paths = displayedFiles.join(", ");
+
+  if (!paths) {
+    return `Timed out waiting for ${fileCount} ${noun} to finish.`;
+  }
+
+  return `Timed out waiting for ${fileCount} ${noun} to finish: ${paths}${remaining}.`;
 }
 
 async function collectDiagnostics(
   session: LanguageServerSession,
   files: string[],
   timeout: number,
+  cwd: string,
 ): Promise<FileDiagnostics[]> {
   const states = session.states.values();
 
@@ -655,7 +700,7 @@ async function collectDiagnostics(
 
   const diagnostics = Promise.race([pending, session.serverFailure]);
 
-  const timeoutMessage = completionMessage(files.length);
+  const timeoutMessage = (): string => completionMessage(session, files, cwd);
 
   const results = await withTimeout(diagnostics, timeout, timeoutMessage);
 
@@ -694,9 +739,13 @@ export async function lintFiles(
   try {
     await initializeLanguageServer(session, options);
 
-    await openDocuments(session, files);
+    const openingDocuments = Promise.race([openDocuments(session, files), session.serverFailure]);
 
-    const results = await collectDiagnostics(session, files, options.timeout);
+    const timeoutMessage = (): string => completionMessage(session, files, options.cwd);
+
+    await withTimeout(openingDocuments, options.timeout, timeoutMessage);
+
+    const results = await collectDiagnostics(session, files, options.timeout, options.cwd);
 
     return results;
   } finally {
