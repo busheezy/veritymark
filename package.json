@@ -16,6 +16,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "prepare": "pnpm build",
     "check": "tsc --noEmit && oxlint && oxfmt --check .",
     "format": "oxfmt --write .",
     "lint": "oxlint",
